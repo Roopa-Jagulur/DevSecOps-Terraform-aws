@@ -29,6 +29,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" 
   }
 }
 
+resource "aws_kms_key" "dynamodb_key" {
+  description             = "KMS key for DynamoDB Terraform lock table"
+  deletion_window_in_days = 7
+}
+
 resource "aws_dynamodb_table" "terraform_locks" {
   name         = "dso-terraform-eks-state-locks"
   billing_mode = "PAY_PER_REQUEST"
@@ -37,6 +42,11 @@ resource "aws_dynamodb_table" "terraform_locks" {
   attribute {
     name = "LockID"
     type = "S"
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.dynamodb_key.arn
   }
 
   point_in_time_recovery {
