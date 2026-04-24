@@ -1,12 +1,12 @@
 # Cloud provider to tell terraform where to create resources
 provider "aws" {
-  region = "us-west-2"
+  region = "us-east-1"
 }
 
 # Resource to tell which resource to create like S3, DynamoDB etc.,
 resource "aws_s3_bucket" "terraform_state" {
-  bucket = "demo-terraform-eks-state-s3-bucket"
-  
+  bucket = "dso-terraform-eks-state-s3-bucket"
+
   lifecycle {
     prevent_destroy = false
   }
@@ -30,7 +30,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" 
 }
 
 resource "aws_dynamodb_table" "terraform_locks" {
-  name         = "terraform-eks-state-locks"
+  name         = "dso-terraform-eks-state-locks"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
