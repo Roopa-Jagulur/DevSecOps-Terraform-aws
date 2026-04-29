@@ -27,24 +27,7 @@ resource "aws_eks_cluster" "main" {
   role_arn = aws_iam_role.cluster.arn
 
   vpc_config {
-    subnet_ids              = var.subnet_ids
-    endpoint_public_access  = false
-    endpoint_private_access = true
-  }
-
-  enabled_cluster_log_types = [
-    "api",
-    "audit",
-    "authenticator",
-    "controllerManager",
-    "scheduler"
-  ]
-
-  encryption_config {
-    provider {
-      key_arn = aws_kms_key.eks.arn
-    }
-    resources = ["secrets"]
+    subnet_ids = var.subnet_ids
   }
 
   # This means attach policy to the IAM_role and then create EKS cluster
