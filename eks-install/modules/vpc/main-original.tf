@@ -12,20 +12,6 @@ resource "aws_vpc" "main" {
   }
 }
 
-resource "aws_default_security_group" "default" {
-  vpc_id = aws_vpc.main.id
-
-  # Remove all inbound rules
-  ingress = []
-
-  # Remove all outbound rules (or restrict if needed)
-  egress = []
-
-  tags = {
-    Name = "${var.cluster_name}-default-sg"
-  }
-}
-
 # Creating private subnet
 resource "aws_subnet" "private" {
   count             = length(var.private_subnet_cidrs)
