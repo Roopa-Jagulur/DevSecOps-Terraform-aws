@@ -29,39 +29,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" 
   }
 }
 
-resource "aws_s3_bucket_public_access_block" "terraform_state_block" {
-  bucket = aws_s3_bucket.terraform_state.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# Dynamodb
-resource "aws_kms_key" "dynamodb_key" {
-  description             = "KMS key for DynamoDB Terraform lock table"
-  deletion_window_in_days = 7
-  enable_key_rotation     = true
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid = "Enable IAM User Permissions"
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
-        }
-        Action   = "kms:*"
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-data "aws_caller_identity" "current" {}
-
 resource "aws_dynamodb_table" "terraform_locks" {
   name         = "dso-terraform-eks-state-locks"
   billing_mode = "PAY_PER_REQUEST"
@@ -70,14 +37,5 @@ resource "aws_dynamodb_table" "terraform_locks" {
   attribute {
     name = "LockID"
     type = "S"
-  }
-
-  server_side_encryption {
-    enabled     = true
-    kms_key_arn = aws_kms_key.dynamodb_key.arn
-  }
-
-  point_in_time_recovery {
-    enabled = true
   }
 }
