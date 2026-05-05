@@ -7,8 +7,8 @@ terraform {
     }
   }
 
-# S3 bucket already created using terraform under eks-install/backend/main.tf which created bucket on aws.
-backend "s3" {
+  # S3 bucket already created using terraform under eks-install/backend/main.tf which created bucket on aws.
+  backend "s3" {
     bucket         = "dso-terraform-eks-state-s3-bucket"
     key            = "terraform.tfstate"
     region         = "us-west-2"

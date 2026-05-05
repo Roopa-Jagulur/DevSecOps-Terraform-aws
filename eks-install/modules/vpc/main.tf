@@ -1,14 +1,14 @@
 # Creating VPC
 resource "aws_vpc" "main" {
   # IP address range of the VPC (tcp/ip implimentation)
-  cidr_block           = var.vpc_cidr 
+  cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
   # In AWS, tags are used in cost optimization / identifying stale resources. 
   # Terraform aws documentation under a respective resource sections mandatory and optional argument reference are detailed.  
   tags = {
-    Name                                           = "${var.cluster_name}-vpc"
-    "kubernetes.io/cluster/${var.cluster_name}"    = "shared"
+    Name                                        = "${var.cluster_name}-vpc"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 }
 
@@ -28,23 +28,23 @@ resource "aws_default_security_group" "default" {
 
 # Creating private subnet
 resource "aws_subnet" "private" {
-  count             = length(var.private_subnet_cidrs)
-  vpc_id            = aws_vpc.main.id
+  count  = length(var.private_subnet_cidrs)
+  vpc_id = aws_vpc.main.id
   # Private subnet IP Range (tcp/ip implimentation)
   cidr_block        = var.private_subnet_cidrs[count.index]
   availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name                                           = "${var.cluster_name}-private-${count.index + 1}"
-    "kubernetes.io/cluster/${var.cluster_name}"    = "shared"
-    "kubernetes.io/role/internal-elb"              = "1"
+    Name                                        = "${var.cluster_name}-private-${count.index + 1}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/internal-elb"           = "1"
   }
 }
 
 # Creating public subnet
 resource "aws_subnet" "public" {
-  count             = length(var.public_subnet_cidrs)
-  vpc_id            = aws_vpc.main.id
+  count  = length(var.public_subnet_cidrs)
+  vpc_id = aws_vpc.main.id
   # Public subnet IP Range (tcp/ip implimentation)
   cidr_block        = var.public_subnet_cidrs[count.index]
   availability_zone = var.availability_zones[count.index]
@@ -52,9 +52,9 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                           = "${var.cluster_name}-public-${count.index + 1}"
-    "kubernetes.io/cluster/${var.cluster_name}"    = "shared"
-    "kubernetes.io/role/elb"                       = "1"
+    Name                                        = "${var.cluster_name}-public-${count.index + 1}"
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
+    "kubernetes.io/role/elb"                    = "1"
   }
 }
 
@@ -69,7 +69,7 @@ resource "aws_internet_gateway" "main" {
 
 # Allocate Elastic IP addresses (EIPs) for NAT Gateways 
 resource "aws_eip" "nat" {
-  count = length(var.public_subnet_cidrs)
+  count  = length(var.public_subnet_cidrs)
   domain = "vpc"
 
   tags = {
