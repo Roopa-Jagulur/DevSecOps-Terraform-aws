@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./eks-install/backend
+        working-directory: ./eks-install/backend/main.tf
 
     steps:
       - uses: actions/checkout@v4
