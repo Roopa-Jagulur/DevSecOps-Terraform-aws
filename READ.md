@@ -15,4 +15,8 @@ we developed modules for VPC and eks clusters.
 **Ansible for On-primises:** (in qualcomm) /main/ansible-onprem-networking
 
 I used ansible for on-premises server infrastructure. refer ansible-onprem-networking/README.md
+<<<<<<< HEAD:READ.md
 ************** END ************
+=======
+*********** END *********************
+>>>>>>> 39f0342078c486c02b36126a77084d754f97eeaf:README.md
