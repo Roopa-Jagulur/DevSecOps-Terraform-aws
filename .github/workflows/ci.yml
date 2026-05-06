@@ -33,11 +33,7 @@ jobs:
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.26.226.155:8200
-<<<<<<< HEAD
           role: github-actions
-=======
-          role: gh-actions-role
->>>>>>> 262598470bfc5013b88f5128e8b967849a7b19ff
           method: jwt
           jwtGithubAudience: vault
           secrets: |
