@@ -1,0 +1,60 @@
+name: Deploy EKS Terraform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "eks-install/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "eks-install/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./eks-install
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch AWS credentials from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: http://100.26.226.155:8200
+          role: github-actions
+          method: jwt
+          jwtGithubAudience: vault
+          secrets: |
+            aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
+            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan
+
+      #- name: Terraform apply
+       # if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+       # run: terraform apply -auto-approve tfplan
