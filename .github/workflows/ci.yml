@@ -20,31 +20,55 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Get AWS creds from Vault (includes STS session token field used by Vault: security_token)
       - name: Fetch AWS creds from Vault
+        id: vault
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
           role: gh-actions-role
           method: jwt
+          outputToken: true
           secrets: |
             aws/creds/terraform-role access_key     | AWS_ACCESS_KEY_ID ;
             aws/creds/terraform-role secret_key     | AWS_SECRET_ACCESS_KEY ;
             aws/creds/terraform-role security_token | AWS_SESSION_TOKEN
 
-      - name: Safe debug (no secrets)
+      # Safe diagnostics (no secret values)
+      - name: Debug what creds are being used (safe)
         shell: bash
         run: |
-          # prevent any profile-based override
-          unset AWS_PROFILE
-          unset AWS_SHARED_CREDENTIALS_FILE
-          unset AWS_CONFIG_FILE
-          unset AWS_SDK_LOAD_CONFIG
+          # Ensure nothing overrides env creds
+          unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_SDK_LOAD_CONFIG
 
           echo "AWS_ACCESS_KEY_ID prefix: ${AWS_ACCESS_KEY_ID:0:4}"
+          echo "AWS_SECRET_ACCESS_KEY set? -> $([ -n "${AWS_SECRET_ACCESS_KEY:-}" ] && echo yes || echo no)"
           echo "AWS_SESSION_TOKEN set? -> $([ -n "${AWS_SESSION_TOKEN:-}" ] && echo yes || echo no)"
           aws --version
 
-      - name: Verify AWS identity (must pass before Terraform)
+      # Extra: show the Vault response fields (keys only, not values)
+      - name: Debug Vault creds response keys (safe)
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+          VAULT_ADDR="http://100.25.203.159:8200"
+
+          json="$(curl -sS \
+            -H "X-Vault-Token: ${{ steps.vault.outputs.vault_token }}" \
+            "$VAULT_ADDR/v1/aws/creds/terraform-role")"
+
+          echo "Vault .data keys:"
+          echo "$json" | jq -r '.data | keys[]'
+
+          echo "access_key prefix from Vault:"
+          echo "$json" | jq -r '.data.access_key | .[0:4]'
+
+          echo "has security_token:"
+          echo "$json" | jq -r '.data.security_token? != null'
+
+      # Hard gate: if this fails, Terraform will fail too
+      - name: Verify AWS identity
         run: aws sts get-caller-identity
 
       - uses: hashicorp/setup-terraform@v3
