@@ -1,5 +1,5 @@
 name: Terraform Deployment
-#on: [push]
+on: [push]
 
 permissions:
   id-token: write
@@ -18,7 +18,7 @@ jobs:
       - name: Fetch Keys from Vault
         uses: hashicorp/vault-action@v3
         with:
-          url: http://34.207.253.10:8200
+          url: http://100.25.203.159:8200
           role: gh-actions-role
           method: jwt
           secrets: |
@@ -28,4 +28,4 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
       - run: terraform init
       - run: terraform plan
-      - run: terraform apply -auto-approve
+      #- run: terraform apply -auto-approve
