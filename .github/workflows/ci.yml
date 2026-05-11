@@ -1,33 +1,60 @@
-name: Terraform
+name: Deploy EKS Terraform
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "eks-install/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "eks-install/**"
+      - ".github/workflows/ci.yml"
   workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   terraform:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: ./eks-install
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Fetch AWS credentials from Vault
+        uses: hashicorp/vault-action@v3
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-2
+          url: http://100.25.203.159:8200
+          role: github-actions
+          method: jwt
+          jwtGithubAudience: vault
+          secrets: |
+            aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
+            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY
 
-      - name: Verify AWS Identity
-        run: aws sts get-caller-identity
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-      - name: Cleanup Terraform cache
-        run: |
-          rm -rf .terraform
-          rm -f .terraform.lock.hcl
+      - name: Terraform format check
+        run: terraform fmt -check -recursive
 
-      - name: Terraform Init
+      - name: Terraform init
         run: terraform init
 
-      - name: Terraform Plan
-        run: terraform plan
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan
+
+      #- name: Terraform apply
+       # if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+       # run: terraform apply -auto-approve tfplan
