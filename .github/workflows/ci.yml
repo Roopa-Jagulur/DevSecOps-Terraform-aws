@@ -20,36 +20,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Read Vault creds into TEMP vars (NOT AWS_* yet)
-      - name: Fetch AWS creds from Vault (temp vars)
+      # 1) Login to Vault using JWT and get a Vault token output
+      - name: Vault login (JWT)
+        id: vault
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
           role: gh-actions-role
           method: jwt
-          secrets: |
-            aws/creds/terraform-role access_key | VAULT_AWS_ACCESS_KEY_ID ;
-            aws/creds/terraform-role secret_key | VAULT_AWS_SECRET_ACCESS_KEY
+          outputToken: true
 
-      - name: Sanitize creds + force AWS SDK to use env creds
+      # 2) Fetch AWS creds from Vault with curl + jq (bypasses vault-action secret mapping)
+      - name: Fetch AWS creds via Vault API (clean export)
         shell: bash
         run: |
-          # Clear anything that can override env creds
+          set -euo pipefail
+
+          # Ensure nothing overrides env creds
           unset AWS_SESSION_TOKEN
           unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_SDK_LOAD_CONFIG
           unset AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME
           rm -f ~/.aws/credentials ~/.aws/config || true
 
-          # IMPORTANT: strip CR/LF so the secret doesn't include hidden characters
-          AK="$(printf '%s' "${VAULT_AWS_ACCESS_KEY_ID}" | tr -d '\r\n')"
-          SK="$(printf '%s' "${VAULT_AWS_SECRET_ACCESS_KEY}" | tr -d '\r\n')"
+          sudo apt-get update -y
+          sudo apt-get install -y jq
 
-          # Export clean values for following steps
+          VAULT_ADDR="http://100.25.203.159:8200"
+          VAULT_TOKEN="${{ steps.vault.outputs.vault_token }}"
+
+          json="$(curl -sS -H "X-Vault-Token: ${VAULT_TOKEN}" \
+            "${VAULT_ADDR}/v1/aws/creds/terraform-role")"
+
+          AK="$(echo "$json" | jq -r '.data.access_key')"
+          SK="$(echo "$json" | jq -r '.data.secret_key')"
+
+          # Strip CR/LF and trim spaces just in case
+          AK="$(printf '%s' "$AK" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          SK="$(printf '%s' "$SK" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+          # Sanity checks (safe)
+          echo "AWS_ACCESS_KEY_ID prefix: ${AK:0:4}"
+          echo "Secret length: ${#SK} (should be 40)"
+
           echo "AWS_ACCESS_KEY_ID=$AK" >> "$GITHUB_ENV"
           echo "AWS_SECRET_ACCESS_KEY=$SK" >> "$GITHUB_ENV"
-
-          # Safe debug (no secrets)
-          echo "AWS_ACCESS_KEY_ID prefix: ${AK:0:4}"
 
       - name: Verify AWS is using env creds (safe)
         shell: bash
