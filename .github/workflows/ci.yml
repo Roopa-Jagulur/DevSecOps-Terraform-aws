@@ -42,18 +42,9 @@ jobs:
 
           echo "AWS_ACCESS_KEY_ID prefix: ${AWS_ACCESS_KEY_ID:0:4}"
           echo "AWS_SESSION_TOKEN set? -> $([ -n "${AWS_SESSION_TOKEN:-}" ] && echo yes || echo no)"
-
-      - name: Install AWS CLI v2 (official)
-        shell: bash
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y unzip curl
-          curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip -q awscliv2.zip
-          sudo ./aws/install
           aws --version
 
-      - name: Verify AWS identity
+      - name: Verify AWS identity (must pass before Terraform)
         run: aws sts get-caller-identity
 
       - uses: hashicorp/setup-terraform@v3
