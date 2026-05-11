@@ -1,5 +1,5 @@
 name: Terraform Deployment
-#on: [push]
+on: [push]
 
 permissions:
   id-token: write
