@@ -2,8 +2,7 @@ name: Deploy EKS Terraform
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
     paths:
       - "eks-install/**"
       - ".github/workflows/ci.yml"
@@ -20,10 +19,13 @@ permissions:
 jobs:
   terraform:
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: ./eks-install
+
+    env:
+      AWS_REGION: eu-west-2
+      AWS_DEFAULT_REGION: eu-west-2
 
     steps:
       - name: Checkout repository
@@ -33,12 +35,24 @@ jobs:
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
-          role: github-actions
           method: jwt
+          path: jwt
+          role: gh-actions-role
           jwtGithubAudience: vault
           secrets: |
             aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
-            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY
+            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY ;
+
+      # IMPORTANT: eliminate overrides (profile/credentials file) that can bypass env vars
+      - name: Ensure AWS env auth is used
+        run: |
+          unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE
+
+      - name: Verify AWS identity (must succeed)
+        run: |
+          echo "AWS_ACCESS_KEY_ID set? -> ${AWS_ACCESS_KEY_ID:+yes}"
+          echo "AWS_SECRET_ACCESS_KEY set? -> ${AWS_SECRET_ACCESS_KEY:+yes}"
+          aws sts get-caller-identity
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -54,7 +68,3 @@ jobs:
 
       - name: Terraform plan
         run: terraform plan -out=tfplan
-
-      #- name: Terraform apply
-       # if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
-       # run: terraform apply -auto-approve tfplan
