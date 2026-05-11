@@ -12,20 +12,43 @@ jobs:
       run:
         working-directory: ./eks-install
 
+    # Optional but recommended (set your real region)
+    env:
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch Keys from Vault
+      - name: Fetch AWS creds from Vault
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
           role: gh-actions-role
           method: jwt
           secrets: |
-            aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
-            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY
+            aws/creds/terraform-role access_key     | AWS_ACCESS_KEY_ID ;
+            aws/creds/terraform-role secret_key     | AWS_SECRET_ACCESS_KEY ;
+            aws/creds/terraform-role security_token | AWS_SESSION_TOKEN
+
+      # Safe debug (prints only "yes/no", not secrets)
+      - name: Check AWS env vars exist
+        run: |
+          echo "AWS_ACCESS_KEY_ID set? -> $([ -n "${AWS_ACCESS_KEY_ID:-}" ] && echo yes || echo no)"
+          echo "AWS_SECRET_ACCESS_KEY set? -> $([ -n "${AWS_SECRET_ACCESS_KEY:-}" ] && echo yes || echo no)"
+          echo "AWS_SESSION_TOKEN set? -> $([ -n "${AWS_SESSION_TOKEN:-}" ] && echo yes || echo no)"
+
+      # If this fails, Terraform will fail too — and you'll know it's auth
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
 
       - uses: hashicorp/setup-terraform@v3
-      - run: terraform init
-      - run: terraform plan
-      #- run: terraform apply -auto-approve
+
+      - name: Terraform init
+        run: terraform init
+
+      - name: Terraform plan
+        run: terraform plan
+
+      # - name: Terraform apply
+      #   run: terraform apply -auto-approve
