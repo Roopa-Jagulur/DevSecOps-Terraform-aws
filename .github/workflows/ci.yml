@@ -12,34 +12,61 @@ jobs:
       run:
         working-directory: ./eks-install
 
-    # Optional but recommended (set your real region)
     env:
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
+      TF_IN_AUTOMATION: "true"
 
     steps:
       - uses: actions/checkout@v4
 
+      # Install AWS CLI (needed for sts get-caller-identity debug)
+      - name: Install AWS CLI
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y awscli
+
       - name: Fetch AWS creds from Vault
+        id: vault
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
           role: gh-actions-role
           method: jwt
+          # Map both possible token fields to temp env vars, then we will choose one.
           secrets: |
             aws/creds/terraform-role access_key     | AWS_ACCESS_KEY_ID ;
             aws/creds/terraform-role secret_key     | AWS_SECRET_ACCESS_KEY ;
-            aws/creds/terraform-role session_token | AWS_SESSION_TOKEN
+            aws/creds/terraform-role security_token | VAULT_SECURITY_TOKEN ;
+            aws/creds/terraform-role session_token  | VAULT_SESSION_TOKEN
 
-      # Safe debug (prints only "yes/no", not secrets)
-      - name: Check AWS env vars exist
+      - name: Normalize AWS session token + clean overrides
+        shell: bash
         run: |
+          # Remove anything that could force AWS SDK/Terraform to use a different credential source
+          unset AWS_PROFILE
+          unset AWS_SHARED_CREDENTIALS_FILE
+          unset AWS_CONFIG_FILE
+          unset AWS_SDK_LOAD_CONFIG
+
+          # Pick whichever token Vault returned (if any)
+          if [ -n "${VAULT_SECURITY_TOKEN:-}" ]; then
+            echo "Using VAULT_SECURITY_TOKEN as AWS_SESSION_TOKEN"
+            echo "AWS_SESSION_TOKEN=${VAULT_SECURITY_TOKEN}" >> $GITHUB_ENV
+          elif [ -n "${VAULT_SESSION_TOKEN:-}" ]; then
+            echo "Using VAULT_SESSION_TOKEN as AWS_SESSION_TOKEN"
+            echo "AWS_SESSION_TOKEN=${VAULT_SESSION_TOKEN}" >> $GITHUB_ENV
+          else
+            echo "No session token returned by Vault (ok only if keys are non-STS/IAM-user style)."
+          fi
+
+          # Safe debug (no secrets printed)
+          echo "AWS_ACCESS_KEY_ID prefix: ${AWS_ACCESS_KEY_ID:0:4}"
           echo "AWS_ACCESS_KEY_ID set? -> $([ -n "${AWS_ACCESS_KEY_ID:-}" ] && echo yes || echo no)"
           echo "AWS_SECRET_ACCESS_KEY set? -> $([ -n "${AWS_SECRET_ACCESS_KEY:-}" ] && echo yes || echo no)"
           echo "AWS_SESSION_TOKEN set? -> $([ -n "${AWS_SESSION_TOKEN:-}" ] && echo yes || echo no)"
 
-      # If this fails, Terraform will fail too — and you'll know it's auth
-      - name: Verify AWS identity
+      - name: Verify AWS identity (must pass before Terraform)
         run: aws sts get-caller-identity
 
       - uses: hashicorp/setup-terraform@v3
@@ -50,5 +77,6 @@ jobs:
       - name: Terraform plan
         run: terraform plan
 
+      # Uncomment when ready
       # - name: Terraform apply
       #   run: terraform apply -auto-approve
