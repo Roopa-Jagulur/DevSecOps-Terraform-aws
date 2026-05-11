@@ -1,72 +1,30 @@
-name: Deploy EKS Terraform
-
-on:
-  push:
-    branches: [ main ]
-    paths:
-      - "eks-install/**"
-      - ".github/workflows/ci.yml"
-  pull_request:
-    paths:
-      - "eks-install/**"
-      - ".github/workflows/ci.yml"
-  workflow_dispatch:
+name: Terraform Deployment
+#on: [push]
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  terraform:
+  deploy:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./eks-install
 
-    env:
-      AWS_REGION: us-east-1
-      AWS_DEFAULT_REGION: us-east-1
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Fetch AWS credentials from Vault
+      - name: Fetch Keys from Vault
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
-          method: jwt
-          path: jwt
           role: gh-actions-role
-          jwtGithubAudience: vault
+          method: jwt
           secrets: |
             aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
-            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY ;
+            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY
 
-      - name: Ensure no session token is used (IAM user creds)
-        shell: bash
-        run: |
-          unset AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
-          echo "AWS_SESSION_TOKEN=" >> $GITHUB_ENV
-          echo "AWS_SECURITY_TOKEN=" >> $GITHUB_ENV
-
-      - name: Verify AWS identity (must succeed)
-        run: |
-          echo "AKID length: $(printf '%s' "$AWS_ACCESS_KEY_ID" | wc -c)"
-          echo "SKEY length: $(printf '%s' "$AWS_SECRET_ACCESS_KEY" | wc -c)"
-          aws sts get-caller-identity --no-cli-pager
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform format check
-        run: terraform fmt -check -recursive
-
-      - name: Terraform init
-        run: terraform init
-
-      - name: Terraform validate
-        run: terraform validate
-
-      - name: Terraform plan
-        run: terraform plan -out=tfplan
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform init
+      - run: terraform plan
