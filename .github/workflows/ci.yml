@@ -1,5 +1,5 @@
 name: Terraform Deployment
-on: [push]
+#on: [push]
 
 permissions:
   id-token: write
@@ -16,71 +16,65 @@ jobs:
       AWS_REGION: us-east-1
       AWS_DEFAULT_REGION: us-east-1
       TF_IN_AUTOMATION: "true"
+      VAULT_ADDR: http://100.25.203.159:8200
 
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Login to Vault using JWT and get a Vault token output
       - name: Vault login (JWT)
         id: vault
         uses: hashicorp/vault-action@v3
         with:
-          url: http://100.25.203.159:8200
+          url: ${{ env.VAULT_ADDR }}
           role: gh-actions-role
           method: jwt
           outputToken: true
 
-      # 2) Fetch AWS creds from Vault with curl + jq (bypasses vault-action secret mapping)
+      - name: Identify which Vault instance CI is using (safe)
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+          echo "Vault sys/health:"
+          curl -sS "$VAULT_ADDR/v1/sys/health" | jq -r '.version, .cluster_name, .cluster_id'
+
       - name: Fetch AWS creds via Vault API (clean export)
         shell: bash
         run: |
           set -euo pipefail
 
-          # Ensure nothing overrides env creds
           unset AWS_SESSION_TOKEN
           unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_SDK_LOAD_CONFIG
           unset AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME
           rm -f ~/.aws/credentials ~/.aws/config || true
 
-          sudo apt-get update -y
-          sudo apt-get install -y jq
-
-          VAULT_ADDR="http://100.25.203.159:8200"
-          VAULT_TOKEN="${{ steps.vault.outputs.vault_token }}"
-
-          json="$(curl -sS -H "X-Vault-Token: ${VAULT_TOKEN}" \
-            "${VAULT_ADDR}/v1/aws/creds/terraform-role")"
+          json="$(curl -sS -H "X-Vault-Token: ${{ steps.vault.outputs.vault_token }}" \
+            "$VAULT_ADDR/v1/aws/creds/terraform-role")"
 
           AK="$(echo "$json" | jq -r '.data.access_key')"
           SK="$(echo "$json" | jq -r '.data.secret_key')"
 
-          # Strip CR/LF and trim spaces just in case
           AK="$(printf '%s' "$AK" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           SK="$(printf '%s' "$SK" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-
-          # Sanity checks (safe)
-          echo "AWS_ACCESS_KEY_ID prefix: ${AK:0:4}"
-          echo "Secret length: ${#SK} (should be 40)"
 
           echo "AWS_ACCESS_KEY_ID=$AK" >> "$GITHUB_ENV"
           echo "AWS_SECRET_ACCESS_KEY=$SK" >> "$GITHUB_ENV"
 
+          echo "AWS_ACCESS_KEY_ID prefix: ${AK:0:4}"
+          echo "Secret length: ${#SK} (should be 40)"
+
       - name: Verify AWS is using env creds (safe)
         shell: bash
         run: |
-          aws --version
           aws configure list
+
+      # TEMP DEBUG (remove after you check in IAM)
+      - name: Print Access Key ID (temporary debug)
+        run: echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
       - uses: hashicorp/setup-terraform@v3
-
-      - name: Terraform init
-        run: terraform init
-
-      - name: Terraform plan
-        run: terraform plan
-
-      # - name: Terraform apply
-      #   run: terraform apply -auto-approve
+      - run: terraform init
+      - run: terraform plan
