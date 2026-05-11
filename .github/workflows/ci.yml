@@ -20,34 +20,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch AWS creds from Vault (iam_user)
+      # Read Vault creds into TEMP vars (NOT AWS_* yet)
+      - name: Fetch AWS creds from Vault (temp vars)
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
           role: gh-actions-role
           method: jwt
           secrets: |
-            aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
-            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY
+            aws/creds/terraform-role access_key | VAULT_AWS_ACCESS_KEY_ID ;
+            aws/creds/terraform-role secret_key | VAULT_AWS_SECRET_ACCESS_KEY
 
-      - name: Force AWS SDK to use Vault env creds
+      - name: Sanitize creds + force AWS SDK to use env creds
         shell: bash
         run: |
-          # Remove anything that can override env creds
+          # Clear anything that can override env creds
           unset AWS_SESSION_TOKEN
-          unset AWS_PROFILE
-          unset AWS_SHARED_CREDENTIALS_FILE
-          unset AWS_CONFIG_FILE
-          unset AWS_SDK_LOAD_CONFIG
-          unset AWS_WEB_IDENTITY_TOKEN_FILE
-          unset AWS_ROLE_ARN
-          unset AWS_ROLE_SESSION_NAME
-
-          # Remove local aws config/credentials if present
+          unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_SDK_LOAD_CONFIG
+          unset AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME
           rm -f ~/.aws/credentials ~/.aws/config || true
 
-          # Safe debug
-          echo "AWS_ACCESS_KEY_ID prefix: ${AWS_ACCESS_KEY_ID:0:4}"
+          # IMPORTANT: strip CR/LF so the secret doesn't include hidden characters
+          AK="$(printf '%s' "${VAULT_AWS_ACCESS_KEY_ID}" | tr -d '\r\n')"
+          SK="$(printf '%s' "${VAULT_AWS_SECRET_ACCESS_KEY}" | tr -d '\r\n')"
+
+          # Export clean values for following steps
+          echo "AWS_ACCESS_KEY_ID=$AK" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$SK" >> "$GITHUB_ENV"
+
+          # Safe debug (no secrets)
+          echo "AWS_ACCESS_KEY_ID prefix: ${AK:0:4}"
+
+      - name: Verify AWS is using env creds (safe)
+        shell: bash
+        run: |
+          aws --version
           aws configure list
 
       - name: Verify AWS identity
