@@ -35,6 +35,10 @@ jobs:
         uses: hashicorp/vault-action@v3
         with:
           url: http://100.25.203.159:8200
+<<<<<<< HEAD
+=======
+          role: gh-actions-role
+>>>>>>> c134ddff3acadd9a0fe7ca39920e712380daa41e
           method: jwt
           path: jwt
           role: gh-actions-role
