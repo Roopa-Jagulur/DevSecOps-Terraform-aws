@@ -42,37 +42,18 @@ jobs:
           secrets: |
             aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
             aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY ;
-            aws/creds/terraform-role security_token | AWS_SESSION_TOKEN ;
 
-      # 1) Remove ANY AWS override vars that can hijack auth
-      - name: Remove AWS override vars
+      - name: Ensure no session token is used (IAM user creds)
         shell: bash
         run: |
-          unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE
-          unset AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME
-          unset AWS_ENDPOINT_URL AWS_STS_ENDPOINT AWS_EC2_METADATA_DISABLED
+          unset AWS_SESSION_TOKEN AWS_SECURITY_TOKEN
+          echo "AWS_SESSION_TOKEN=" >> $GITHUB_ENV
+          echo "AWS_SECURITY_TOKEN=" >> $GITHUB_ENV
 
-      # 2) Trim hidden chars from Vault outputs and re-export clean values
-      - name: Sanitize AWS credentials
-        shell: bash
-        run: |
-          AKID="$(printf '%s' "$AWS_ACCESS_KEY_ID" | tr -d '\r\n' | xargs)"
-          SKEY="$(printf '%s' "$AWS_SECRET_ACCESS_KEY" | tr -d '\r\n' | xargs)"
-          STOK="$(printf '%s' "${AWS_SESSION_TOKEN:-}" | tr -d '\r\n' | xargs)"
-
-          echo "AWS_ACCESS_KEY_ID=$AKID" >> "$GITHUB_ENV"
-          echo "AWS_SECRET_ACCESS_KEY=$SKEY" >> "$GITHUB_ENV"
-          if [ -n "$STOK" ] && [ "$STOK" != "<nil>" ]; then
-            echo "AWS_SESSION_TOKEN=$STOK" >> "$GITHUB_ENV"
-          fi
-
-      # 3) SAFE debug: lengths + whoami test
       - name: Verify AWS identity (must succeed)
-        shell: bash
         run: |
-          echo "AKID length: $(printf '%s' "$AWS_ACCESS_KEY_ID" | wc -c)"   # should be 20
-          echo "SKEY length: $(printf '%s' "$AWS_SECRET_ACCESS_KEY" | wc -c)" # should be 40
-          aws --version
+          echo "AKID length: $(printf '%s' "$AWS_ACCESS_KEY_ID" | wc -c)"
+          echo "SKEY length: $(printf '%s' "$AWS_SECRET_ACCESS_KEY" | wc -c)"
           aws sts get-caller-identity --no-cli-pager
 
       - name: Setup Terraform
