@@ -12,20 +12,94 @@ jobs:
       run:
         working-directory: ./eks-install
 
+    env:
+      VAULT_ADDR: http://100.25.203.159:8200
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      TF_IN_AUTOMATION: "true"
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch Keys from Vault
+      # 1) Login to Vault using GitHub OIDC JWT and get a Vault token
+      - name: Vault login
+        id: vault
         uses: hashicorp/vault-action@v3
         with:
-          url: http://100.25.203.159:8200
+          url: ${{ env.VAULT_ADDR }}
           role: gh-actions-role
           method: jwt
-          secrets: |
-            aws/creds/terraform-role access_key | AWS_ACCESS_KEY_ID ;
-            aws/creds/terraform-role secret_key | AWS_SECRET_ACCESS_KEY
+          outputToken: true
+
+      # 2) Fetch AWS creds from Vault (iam_user -> access_key + secret_key only)
+      - name: Fetch AWS creds from Vault (clean export)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Ensure no other AWS auth method overrides env creds
+          unset AWS_SESSION_TOKEN
+          unset AWS_PROFILE AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_SDK_LOAD_CONFIG
+          unset AWS_WEB_IDENTITY_TOKEN_FILE AWS_ROLE_ARN AWS_ROLE_SESSION_NAME
+          rm -f ~/.aws/credentials ~/.aws/config || true
+
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+
+          json="$(curl -sS -H "X-Vault-Token: ${{ steps.vault.outputs.vault_token }}" \
+            "$VAULT_ADDR/v1/aws/creds/terraform-role")"
+
+          AK="$(echo "$json" | jq -r '.data.access_key')"
+          SK="$(echo "$json" | jq -r '.data.secret_key')"
+
+          # strip CR/LF + trim spaces
+          AK="$(printf '%s' "$AK" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          SK="$(printf '%s' "$SK" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+          echo "AWS_ACCESS_KEY_ID=$AK" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$SK" >> "$GITHUB_ENV"
+
+          # IMPORTANT for iam_user: no session token
+          echo "AWS_SESSION_TOKEN=" >> "$GITHUB_ENV"
+
+          echo "AWS_ACCESS_KEY_ID prefix: ${AK:0:4}"
+          echo "Secret length: ${#SK} (should be 40)"
+
+      # 3) Verify creds before terraform
+      - name: Verify AWS identity
+        shell: bash
+        run: |
+          aws configure list
+          aws sts get-caller-identity
 
       - uses: hashicorp/setup-terraform@v3
-      - run: terraform init
-      - run: terraform plan
-      #- run: terraform apply -auto-approve
+
+      # 4) Terraform (backend + provider will use env creds)
+      - name: Terraform init
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ""
+          AWS_REGION: ${{ env.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          AWS_PROFILE: ""
+          AWS_SDK_LOAD_CONFIG: "0"
+          AWS_WEB_IDENTITY_TOKEN_FILE: ""
+          AWS_ROLE_ARN: ""
+        run: terraform init
+
+      - name: Terraform plan
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ""
+          AWS_REGION: ${{ env.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+          AWS_PROFILE: ""
+          AWS_SDK_LOAD_CONFIG: "0"
+          AWS_WEB_IDENTITY_TOKEN_FILE: ""
+          AWS_ROLE_ARN: ""
+        run: terraform plan
+
+      # - name: Terraform apply
+      #   run: terraform apply -auto-approve
