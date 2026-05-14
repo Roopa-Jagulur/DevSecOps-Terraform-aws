@@ -75,6 +75,21 @@ jobs:
           echo "Wrote ~/.aws/credentials and ~/.aws/config for profile: vault"
           echo "Access key prefix: ${AK:0:4}"
           echo "Secret length: ${#SK} (should be 40)"
+            
+      - name: Show which Vault instance CI is using (safe)
+        shell: bash
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+          echo "Vault sys/health:"
+          curl -sS "${VAULT_ADDR}/v1/sys/health" | jq -r '.version, .cluster_name, .cluster_id'
+
+      - name: Print Access Key ID used by profile (TEMP debug)
+        shell: bash
+        run: |
+          # This prints ONLY the access key id (not the secret).
+          # Remove this step after debugging and rotate keys.
+          grep -E 'aws_access_key_id' ~/.aws/credentials | sed 's/.*= *//'
 
       - name: Verify AWS identity (profile)
         shell: bash
