@@ -1,5 +1,7 @@
 name: Terraform Deployment
-on: [push]
+
+on:
+  push:
 
 permissions:
   id-token: write
@@ -8,6 +10,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: ./eks-install
@@ -23,7 +26,8 @@ jobs:
       AWS_CONFIG_FILE: /home/runner/.aws/config
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Vault login (JWT)
         id: vault
@@ -51,24 +55,22 @@ jobs:
           mkdir -p ~/.aws
 
           json="$(curl -sS -H "X-Vault-Token: ${{ steps.vault.outputs.vault_token }}" \
-            "$VAULT_ADDR/v1/aws/creds/terraform-role")"
+            "${VAULT_ADDR}/v1/aws/creds/terraform-role")"
 
           AK="$(echo "$json" | jq -r '.data.access_key' | tr -d '\r\n')"
           SK="$(echo "$json" | jq -r '.data.secret_key' | tr -d '\r\n')"
 
-          # Write credentials file
           cat > ~/.aws/credentials <<EOF
-[vault]
-aws_access_key_id = $AK
-aws_secret_access_key = $SK
-EOF
+          [vault]
+          aws_access_key_id = $AK
+          aws_secret_access_key = $SK
+          EOF
 
-          # Write config file (region)
           cat > ~/.aws/config <<EOF
-[profile vault]
-region = ${AWS_REGION}
-output = json
-EOF
+          [profile vault]
+          region = ${AWS_REGION}
+          output = json
+          EOF
 
           echo "Wrote ~/.aws/credentials and ~/.aws/config for profile: vault"
           echo "Access key prefix: ${AK:0:4}"
@@ -81,7 +83,8 @@ EOF
           aws configure list --profile vault
           aws sts get-caller-identity --profile vault
 
-      - uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
       - name: Terraform init (forced profile)
         env:
@@ -107,5 +110,15 @@ EOF
           AWS_ROLE_ARN: ""
         run: terraform plan
 
+      # Uncomment when ready:
       # - name: Terraform apply
+      #   env:
+      #     AWS_PROFILE: vault
+      #     AWS_REGION: us-east-1
+      #     AWS_DEFAULT_REGION: us-east-1
+      #     AWS_SDK_LOAD_CONFIG: "1"
+      #     AWS_SHARED_CREDENTIALS_FILE: /home/runner/.aws/credentials
+      #     AWS_CONFIG_FILE: /home/runner/.aws/config
+      #     AWS_WEB_IDENTITY_TOKEN_FILE: ""
+      #     AWS_ROLE_ARN: ""
       #   run: terraform apply -auto-approve
