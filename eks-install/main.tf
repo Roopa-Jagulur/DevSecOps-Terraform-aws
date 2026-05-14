@@ -8,14 +8,14 @@ terraform {
   }
 
   # S3 bucket already created using terraform under eks-install/backend/main.tf which created bucket on aws.
-  backend "s3" {
-    bucket         = "dso-terraform-eks-state-s3-bucket"
-    key            = "terraform.tfstate"
-    region         = "us-east-1"
-    dynamodb_table = "dso-terraform-eks-state-locks"
-    encrypt        = true
-  }
-}
+ #  backend "s3" {
+   #  bucket         = "dso-terraform-eks-state-s3-bucket"
+    # key            = "terraform.tfstate"
+   #  region         = "us-east-1"
+    # dynamodb_table = "dso-terraform-eks-state-locks"
+    # encrypt        = true
+  # }
+# }
 
 provider "aws" {
   region = var.region
